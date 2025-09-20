@@ -170,7 +170,7 @@ class PPO(object):
                 self.critic_optimizer.step()
                 self.critic_losses.append(critic_loss.item())
 
-    def choose_action(self, s):
+    def select_action(self, s):
         s = torch.FloatTensor(s).unsqueeze(0)
         with torch.no_grad():
             dist = self.actor(s)
@@ -241,9 +241,9 @@ class PPO(object):
             plt.savefig('reward_plot.png', format='png', dpi=600, bbox_inches='tight')
         plt.tight_layout()
         plt.grid(True)
-        plt.show()
-        plt.clf()
-        plt.close()
+        #plt.show()
+        #plt.clf()
+        #plt.close()
 
         plt.figure()
         plt.title("Actor Loss")
@@ -254,7 +254,9 @@ class PPO(object):
             plt.savefig('actor_loss_plot.png', format='png', dpi=600, bbox_inches='tight')
         plt.tight_layout()
         plt.grid(True)
-        plt.show()
+        #plt.show()
+        #plt.clf()
+        #plt.close()
 
         plt.figure()
         plt.title("Critic Loss")
@@ -265,11 +267,9 @@ class PPO(object):
             plt.savefig('critic_loss_plot.png', format='png', dpi=600, bbox_inches='tight')
         plt.tight_layout()
         plt.grid(True)
-        plt.show()
-        plt.clf()
-        plt.close()
-
-
+        #plt.show()
+        #plt.clf()
+        #plt.close()
 
 
 
@@ -290,7 +290,7 @@ def main(cfg: DictConfig):
             ep_r = 0
             ep_step = 0
             for t in range(cfg.ep_len):
-                a, a_log_prob = ppo.choose_action(s)
+                a, a_log_prob = ppo.select_action_b(s)
                 s_, r, terminated, truncated, info = env.step(a.numpy())
                 done = terminated or truncated
                 buffer_s.append(s)

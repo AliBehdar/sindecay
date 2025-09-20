@@ -7,7 +7,7 @@ critic_save_path: "./critic_weights-and-plot/final_weights"
 
 env_name: 'Swimmer-v5'
 gamma: 0.999
-ep_max: 100
+ep_max: 1000
 ep_len: 1000
 a_lr: 0.0001
 c_lr: 0.0001
