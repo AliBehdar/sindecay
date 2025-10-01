@@ -84,7 +84,10 @@ class PPO(object):
         self.max_grad_norm = cfg.max_grad_norm
         self.kl=cfg.kl
         self.epsilon = cfg.epsilon
-        self.temperature = cfg.temperature
+        self.temperature_max = cfg.temperature_max
+        self.temperature_min = cfg.temperature_min
+        self.decay_rate = cfg.decay_rate
+        self.temperature = self.temperature_max
 
         self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
 
@@ -178,46 +181,6 @@ class PPO(object):
         action_log_prob = dist.log_prob(action).sum(-1, keepdim=True)
         return action, action_log_prob
     
-    def select_action_g(self, state):
-        """
-        Selects an action using epsilon-greedy strategy based on the policy's mean action.
-        
-        Parameters:
-            state (np.ndarray): Input array representing the state.
-        
-        Returns:
-            action (np.ndarray): The selected action.
-        """
-        state = torch.FloatTensor(state).unsqueeze(0)
-        # Exploration: epsilon-greedy
-        if np.random.random() < self.epsilon:
-            return self.action_space.sample()
-        
-        # Exploitation: the action is selected based on the policy mean.    
-        with torch.no_grad():
-            dist = self.actor(state)
-            action = dist.mean.squeeze(0).numpy()
-                        
-            return action
-
-    def select_action_b(self, state):
-        """
-        Selects an action using a temperature-scaled policy distribution.
-        
-        Parameters:
-            state (np.ndarray): Input array representing the state.
-        
-        Returns:
-            action (np.ndarray): The selected action.
-        """
-        state = torch.FloatTensor(state).unsqueeze(0)
-        with torch.no_grad():
-            dist = self.actor(state)
-            mu = dist.mean
-            sigma = dist.stddev * self.temperature
-            dist = Normal(mu, sigma)
-            action = dist.sample().squeeze(0).numpy()
-        return action
     
     def get_v(self, s):
         s = torch.FloatTensor(s).unsqueeze(0)
@@ -243,7 +206,7 @@ class PPO(object):
         plt.grid(True)
         #plt.show()
         #plt.clf()
-        #plt.close()
+        plt.close()
 
         plt.figure()
         plt.title("Actor Loss")
@@ -256,7 +219,7 @@ class PPO(object):
         plt.grid(True)
         #plt.show()
         #plt.clf()
-        #plt.close()
+        plt.close()
 
         plt.figure()
         plt.title("Critic Loss")
@@ -269,7 +232,7 @@ class PPO(object):
         plt.grid(True)
         #plt.show()
         #plt.clf()
-        #plt.close()
+        plt.close()
 
 
 
@@ -290,7 +253,7 @@ def main(cfg: DictConfig):
             ep_r = 0
             ep_step = 0
             for t in range(cfg.ep_len):
-                a, a_log_prob = ppo.select_action_b(s)
+                a, a_log_prob = ppo.select_action(s)
                 s_, r, terminated, truncated, info = env.step(a.numpy())
                 done = terminated or truncated
                 buffer_s.append(s)
@@ -346,7 +309,7 @@ def main(cfg: DictConfig):
             s, info = env.reset(seed=seed)
             ep_r = 0
             for t in range(1,cfg.ep_len+1):
-                a, _ = ppo.choose_action(s)
+                a, _ = ppo.select_action(s)
                 s_, r, terminated, truncated, info = env.step(a.numpy())
                 s = s_
                 done = terminated or truncated

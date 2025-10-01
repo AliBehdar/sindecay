@@ -24,7 +24,9 @@ lam : 0.01
 
 max_grad_norm: 0.5
 epsilon: 0.1
-temperature: 1.0
+temperature_max: 5.0
+temperature_min: 0.7
+decay_rate : 0.995
 Interval_Save : 100
 
 hydra:

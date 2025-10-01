@@ -46,5 +46,5 @@ env/
 # Secrets and keys (don't commit these)
 *.pem
 *.key
-outputs/
+PPOtest/outputs/
 Arxiv/
