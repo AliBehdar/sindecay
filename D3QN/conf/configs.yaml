@@ -17,13 +17,13 @@ train: true
 env_name: "LunarLander-v2"
 render_mode_train: null
 render_mode_test: "human"
-save_path: "./weights-and-plot/final_weights"
-load_path: "./weights-and-plot/final_weights_300"
+save_path: "./weights/final_weights"
+load_path: "./weights/final_weights_300"
 save_interval: 100
 sma_window: 50
 
-#hydra:
-#  run:
-#    dir: ./outputs/${now:%m-%d-%H-%M}
-#  job:
-#    chdir: true
+hydra:
+  run:
+    dir: ./outputs/${now:%m-%d-%H-%M}
+  job:
+    chdir: true

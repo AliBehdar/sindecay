@@ -1,45 +1,61 @@
-import tensorflow as tf
-from tensorflow.keras import Model
+
 import numpy as np
 import os,random
-from tensorflow.python.framework import random_seed
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
 def seed(cfg):
-    np.random.seed(cfg.seed)
-    np.random.default_rng(cfg.seed)
-    os.environ['PYTHONHASHSEED'] = str(cfg.seed)
-    random_seed.set_seed(cfg.seed)
+    s =int(cfg.seed)
+    np.random.seed(s)
+    np.random.default_rng(s)
+    os.environ['PYTHONHASHSEED'] = str(s)
     random.seed(cfg.seed)
-    np.random.seed(cfg.seed)
-    tf.random.set_seed(cfg.seed)
+    
+    torch.manual_seed(s)
+    torch.cuda.manual_seed_all(s)
+    # Deterministic behavior for cuDNN (may reduce performance)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    # can raise errors on non-deterministic ops
+    # torch.use_deterministic_algorithms(True)
+class Network(nn.Module):
+    def __init__(self, state_size: int, action_size: int,cfg=None ):
+        """
+        PyTorch version of your network.
+        :param state_size: input dimension (not used explicitly in linear layers here,
+                           but kept for API compatibility)
+        :param action_size: number of actions (output dimension)
+        :param cfg: object with attribute hidden_size
+        """
 
-class Network(Model):
-    def __init__(self, state_size: int, action_size: int,cfg ):
-        """
-        Initialization.
-        :param state_size: The size of the state space.
-        :param action_size: The size of the action space.
-        :param hidden_size: The size of the hidden layers.
-        """
-        super(Network, self).__init__()
-        
+        super().__init__()
+        hidden = cfg.hidden_size if cfg is not None else 128
         self.num_action = action_size
-        self.layer1 = tf.keras.layers.Dense(cfg.hidden_size, activation='relu')# Define the first hidden layer with ReLU activation
-        self.layer2 = tf.keras.layers.Dense(cfg.hidden_size, activation='relu')# Define the second hidden layer with ReLU activation
-        self.state = tf.keras.layers.Dense(self.num_action)# Define the output layer for state values
-        self.action = tf.keras.layers.Dense(self.num_action)# Define the output layer for action values
+        self.layer1 = nn.Linear(state_size, hidden)# Define the first hidden layer with ReLU activation
+        self.layer2 = nn.Linear(hidden, hidden)# Define the second hidden layer with ReLU activation
+        self.state_head = nn.Linear(hidden,self.num_action)# Define the output layer for state values
+        self.action_head = nn.Linear(hidden,self.num_action)# Define the output layer for action values
+        self.activation = nn.ReLU()
 
-    def call(self, state):
+    def forward(self, state):
         """
-        Forward pass of the network.
-        :param state: Input state.
-        :return: Value function Q(s, a).
+        Forward pass.
+        x: tensor of shape (batch, state_size) or (state_size,) for single sample
+        returns: Q-values tensor of shape (batch, num_action)
         """
-        layer1 = self.layer1(state) # Pass the input state through the first hidden layer      
-        layer2 = self.layer2(layer1)  # Pass the result through the second hidden layer
-        state = self.state(layer2) # Compute the state values       
-        action = self.action(layer2) # Compute the action values        
-        mean = tf.keras.backend.mean(action, keepdims=True)# Calculate the mean of the action values 
-        advantage = (action - mean)# Calculate the advantage by subtracting the mean action value      
-        value = state + advantage # Compute the final Q-values by adding state values and advantages 
+        if state.dim() == 1:
+            state = state.unsqueeze(0)
+        
+        h = self.activation(self.layer1(state))
+        h = self.activation(self.layer2(h))
+        
+        state_vals = self.state_head(h)   # (batch, num_action)
+        action_vals = self.action_head(h)       
+        
+        mean = state_vals = self.state_head(h)   # (batch, num_action)
 
-        return value
+        advantage = action_vals - mean    # Calculate the advantage by subtracting the mean action value      
+        q_values = state_vals + advantage # Compute the final Q-values by adding state values and advantages 
+
+        return q_values

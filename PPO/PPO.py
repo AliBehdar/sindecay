@@ -9,7 +9,6 @@ from torch.distributions import Normal
 import os
 import hydra 
 from omegaconf import DictConfig
-from pathlib import Path
 
 os.environ['MUJOCO_GL'] = 'osmesa'
 # Seed and environment setup
