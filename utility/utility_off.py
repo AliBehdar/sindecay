@@ -74,9 +74,11 @@ class NetworkCNN(nn.Module):
 
         super().__init__()
         self.activation = nn.ReLU()
+        if len(state_size) == 2:
+            state_size = (*state_size, 1)
         self.in_channels = state_size[2]
-        hidden1 = cfg.hidden_size1*2
-        hidden2 = cfg.hidden_size2*2
+        hidden1 = cfg.hidden_size1
+        hidden2 = cfg.hidden_size2
         hidden3 = cfg.hidden_size3
         self.conv1 = nn.Conv2d(self.in_channels,hidden1, kernel_size=8, stride=4)  
         self.conv2 = nn.Conv2d(hidden1, hidden2, kernel_size=4, stride=2)
@@ -102,8 +104,12 @@ class NetworkCNN(nn.Module):
         x: tensor of shape (batch, state_size) or (state_size,) for single sample
         returns: Q-values tensor of shape (batch, num_action)
         """
-        if state.dim() == 3:  
-            state = state.unsqueeze(0).permute(0, 3, 1, 2) 
+        if state.dim() == 3:  # Single sample without channel (e.g., grayscale)
+            state = state.unsqueeze(0)
+        if len(state.shape) == 3:  # (batch, h, w) for grayscale, add channel
+            state = state.unsqueeze(1)  # (batch, 1, h, w)
+        elif len(state.shape) == 4 and state.shape[-1] in [1, 3]:  # (batch, h, w, c)
+            state = state.permute(0, 3, 1, 2)  # (batch, c, h, w) 
         
         h = self.activation(self.conv1(state))
         h = self.activation(self.conv2(h))

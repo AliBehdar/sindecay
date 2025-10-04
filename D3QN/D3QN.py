@@ -14,7 +14,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
 from utility.plots import plot
-from utility.utility_off import seed,NetworkCNN
+from utility.utility_off import seed,NetworkCNN,NetworkMLP
 # 1.1
 import gymnasium as gym
 import ale_py
@@ -49,8 +49,14 @@ class DQNAgent:
         self.action_size = self.env.action_space.n
 
 
-        self.dqn = NetworkCNN(self.state_size, self.action_size,cfg).to(self.device)
-        self.dqn_target = NetworkCNN(self.state_size, self.action_size,cfg).to(self.device)
+        self.is_ram = (cfg.obs_type == "ram")
+
+        if self.is_ram:
+            self.dqn = NetworkMLP(self.state_size[0], self.action_size, cfg).to(self.device)
+            self.dqn_target = NetworkMLP(self.state_size[0], self.action_size, cfg).to(self.device)
+        else:
+            self.dqn = NetworkCNN(self.state_size, self.action_size, cfg).to(self.device)
+            self.dqn_target = NetworkCNN(self.state_size, self.action_size, cfg).to(self.device)
         self.optimizer = optim.Adam(self.dqn.parameters(),lr=self.lr)
         self.memory = deque(maxlen=self.cfg.memory_size)
         
@@ -64,8 +70,14 @@ class DQNAgent:
 
     def get_action(self, state, epsilon):
         #state = self._process_state(state)
-        state = torch.from_numpy(np.array(state)).float().unsqueeze(0).to(self.device)
-        state = state.permute(0, 3, 1, 2)
+        state_np = np.array(state)
+        state = torch.from_numpy(state_np).float().to(self.device)
+        if state.dim() == 2:  # Single grayscale (h, w)
+            state = state.unsqueeze(0).unsqueeze(0)  # (1, 1, h, w)
+        elif state.dim() == 1:  # RAM (features,)
+            state = state.unsqueeze(0)  # (1, features)
+        elif state.dim() == 3 and not self.is_ram:  # Single RGB (h, w, c)
+            state = state.unsqueeze(0).permute(0, 3, 1, 2)  # (1, c, h, w)
         with torch.no_grad():
             q_value = self.dqn(state)[0]
 
@@ -87,10 +99,20 @@ class DQNAgent:
         next_states = np.array([i[3] for i in mini_batch])
         dones       = np.array([i[4] for i in mini_batch])
 
-        states      = torch.from_numpy(states).float().permute(0, 3, 1, 2).to(self.device)
+        states      = torch.from_numpy(states).float().to(self.device)
+        if not self.is_ram:
+            if len(states.shape) == 3:  # (batch, h, w) for grayscale
+                states = states.unsqueeze(1)  # (batch, 1, h, w)
+            else:  # (batch, h, w, c) for RGB
+                states = states.permute(0, 3, 1, 2)  # (batch, c, h, w)
         actions     = torch.from_numpy(actions).long().to(self.device)
         rewards     = torch.from_numpy(rewards).float().to(self.device)
-        next_states = torch.from_numpy(next_states).float().permute(0, 3, 1, 2).to(self.device) 
+        next_states = torch.from_numpy(next_states).float().to(self.device) 
+        if not self.is_ram:
+            if len(next_states.shape) == 3:  # (batch, h, w) for grayscale
+                next_states = next_states.unsqueeze(1)  # (batch, 1, h, w)
+            else:  # (batch, h, w, c) for RGB
+                next_states = next_states.permute(0, 3, 1, 2)  # (batch, c, h, w)
         dones       = torch.from_numpy(dones).float().to(self.device)
 
         next_Qs = self.dqn(next_states)
@@ -129,7 +151,12 @@ class DQNAgent:
         self.gamma = 1 - 0.985 * (1 - self.gamma)
 
     def load(self, path):
-        self.dqn = NetworkCNN(self.state_size, self.action_size, self.cfg).to(self.device)
+
+        if self.is_ram:
+            self.dqn = NetworkMLP(self.state_size[0], self.action_size, self.cfg).to(self.device)
+        else:
+            self.dqn = NetworkCNN(self.state_size, self.action_size, self.cfg).to(self.device)
+            
         self.dqn.load_state_dict(torch.load(path,map_location=self.device))
         self._target_hard_update()
 
@@ -142,7 +169,7 @@ class DQNAgent:
 def main(cfg: DictConfig):
     seed(cfg)
     gym.register_envs(ale_py) 
-    env = gym.make(cfg.env_name,render_mode="human" if not cfg.train else None)
+    env = gym.make(cfg.env_name,render_mode="human" if not cfg.train else None,obs_type=cfg.obs_type)
     agent = DQNAgent(env,cfg)
     if cfg.train:
         update_cnt = 0
@@ -166,7 +193,7 @@ def main(cfg: DictConfig):
                 done = terminated or truncated
                 # if episode ends
                 if done:
-                    print("Episode: {}/{}, Episodes reward: {:.4}, e: {:.3}".format(episode, cfg.max_episodes, episode_reward, epsilon)) 
+                    print("Episode: {}/{}, Episodes reward: {:.6}, e: {:.3}".format(episode, cfg.max_episodes, episode_reward, epsilon)) 
                     break
 
                 if update_cnt >= agent.batch_size:

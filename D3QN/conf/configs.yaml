@@ -3,31 +3,32 @@ hidden_size1: 128
 hidden_size2: 64
 hidden_size3: 16
 max_episodes: 500
-batch_size: 128
+batch_size: 512
 epsilon: 1.0
 
 max_epsilon: 1.0
 min_epsilon: 0.01
 decay_rate: 0.025
 memory_size: 200000
-learning_rate: 0.001
+learning_rate: 0.008
 target_updates: 20
 
-device : cuda
+device : cpu
 gamma: 0.99
 train_start: 1000
 soft_update: true
 tau: 0.1
 train: true
 # "LunarLander-v2"
-env_name: "ALE/Breakout-v5"
+env_name: "ALE/AirRaid-v5"
+obs_type: "ram" # Change to "ram" for RAM observations
 render_mode_train: null
 render_mode_test: "human"
 save_path: "./weights/final_weights"
 load_path: "./weights/final_weights_300"
 save_interval: 100
 sma_window: 50
-myAl : true
+myAl : False
 hydra:
   run:
     dir: ./outputs/${now:%m-%d-%H-%M}
