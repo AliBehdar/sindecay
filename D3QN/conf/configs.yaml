@@ -1,17 +1,19 @@
 seed: 1
-hidden_size1: 210
-hidden_size2: 100
+hidden_size1: 128
+hidden_size2: 64
 hidden_size3: 16
 max_episodes: 500
 batch_size: 128
 epsilon: 1.0
+
 max_epsilon: 1.0
 min_epsilon: 0.01
 decay_rate: 0.025
-memory_size: 100000
+memory_size: 200000
 learning_rate: 0.001
 target_updates: 20
 
+device : cuda
 gamma: 0.99
 train_start: 1000
 soft_update: true

@@ -1,8 +1,7 @@
-import pygame,random
+import pygame, random
 import gymnasium as gym
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.optim as optim
 import hydra 
 from omegaconf import DictConfig
@@ -15,11 +14,10 @@ warnings.filterwarnings("ignore", category=UserWarning)
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
 from utility.plots import plot
-from utility.utility_off import seed,Network
+from utility.utility_off import seed,NetworkCNN
 # 1.1
 import gymnasium as gym
 import ale_py
-
 
 class DQNAgent:
     def __init__(self, env: gym.Env,cfg):
@@ -37,54 +35,47 @@ class DQNAgent:
             min_epsilon (float): min value of epsilon
             gamma (float): discount factor
         """
+        self.device = cfg.device #torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.cfg=cfg
         self.env = env
         self.lr=cfg.learning_rate
-        self.action_space = env.action_space
-        self.action_space.seed(self.cfg.seed)
-        self.state_size = self.env.observation_space.shape[0]
-          
-        self.action_size = self.env.action_space.n
         self.batch_size = cfg.batch_size
         self.target_updates = cfg.target_updates
-        self.dqn = Network(self.state_size, self.action_size,cfg)
-        self.dqn_target = Network(self.state_size, self.action_size,cfg)
+        self.action_space = env.action_space
+
+        self.action_space.seed(self.cfg.seed)
+        #self.state_size = self.env.observation_space.shape
+        self.state_size = self.env.observation_space.shape
+        self.action_size = self.env.action_space.n
+
+
+        self.dqn = NetworkCNN(self.state_size, self.action_size,cfg).to(self.device)
+        self.dqn_target = NetworkCNN(self.state_size, self.action_size,cfg).to(self.device)
         self.optimizer = optim.Adam(self.dqn.parameters(),lr=self.lr)
         self.memory = deque(maxlen=self.cfg.memory_size)
-        self.Soft_Update = False # use soft parameter update
+        
+        self.Soft_Update = False 
         self.tau = cfg.tau 
-        self._target_hard_update()
         self.loss_history=[]
         self.gamma = cfg.gamma
-        self.update_counter = 0  # Initialize counter
+        self.update_counter = 0  
         self.soft_update = cfg.soft_update 
-        self._target_hard_update()  # Call after defining it
+     
 
     def get_action(self, state, epsilon):
-        state = self._process_state(state)
-        state = torch.from_numpy(np.array(state)).float().unsqueeze(0)
+        #state = self._process_state(state)
+        state = torch.from_numpy(np.array(state)).float().unsqueeze(0).to(self.device)
+        state = state.permute(0, 3, 1, 2)
         with torch.no_grad():
             q_value = self.dqn(state)[0]
 
-        # Choose an action a in the current world state (s)
-        # If this number < greater than epsilon doing a random choice --> exploration
         if np.random.rand() <= epsilon:
             action = np.random.choice(self.action_size)
-
-        ## Else --> exploitation (taking the biggest Q value for this state)
         else:
             action = torch.argmax(q_value).item() 
         return action
-    
-    def _process_state(self, state):
-        if isinstance(state, dict):
-            return np.concatenate([state[key].flatten() for key in sorted(state.keys())])
-        else:
-            return np.asarray(state).flatten()
    
     def append_sample(self, state, action, reward, next_state, done):
-        state = self._process_state(state)
-        next_state = self._process_state(next_state)
         self.memory.append((state, action, reward, next_state, done))
  
     def train_step(self):
@@ -96,11 +87,11 @@ class DQNAgent:
         next_states = np.array([i[3] for i in mini_batch])
         dones       = np.array([i[4] for i in mini_batch])
 
-        states      = torch.from_numpy(states).float()
-        actions     = torch.from_numpy(actions).long()
-        rewards     = torch.from_numpy(rewards).float()
-        next_states = torch.from_numpy(next_states).float()
-        dones       = torch.from_numpy(dones).float()
+        states      = torch.from_numpy(states).float().permute(0, 3, 1, 2).to(self.device)
+        actions     = torch.from_numpy(actions).long().to(self.device)
+        rewards     = torch.from_numpy(rewards).float().to(self.device)
+        next_states = torch.from_numpy(next_states).float().permute(0, 3, 1, 2).to(self.device) 
+        dones       = torch.from_numpy(dones).float().to(self.device)
 
         next_Qs = self.dqn(next_states)
         next_action = torch.argmax(next_Qs, dim=1)
@@ -138,8 +129,8 @@ class DQNAgent:
         self.gamma = 1 - 0.985 * (1 - self.gamma)
 
     def load(self, path):
-        self.dqn = Network(self.state_size, self.action_size, self.cfg)
-        self.dqn.load_state_dict(torch.load(path))
+        self.dqn = NetworkCNN(self.state_size, self.action_size, self.cfg).to(self.device)
+        self.dqn.load_state_dict(torch.load(path,map_location=self.device))
         self._target_hard_update()
 
     def save(self, path):
@@ -151,7 +142,7 @@ class DQNAgent:
 def main(cfg: DictConfig):
     seed(cfg)
     gym.register_envs(ale_py) 
-    env = gym.make(cfg.env_name,disable_env_checker=True,render_mode="human" if not cfg.train else None)
+    env = gym.make(cfg.env_name,render_mode="human" if not cfg.train else None)
     agent = DQNAgent(env,cfg)
     if cfg.train:
         update_cnt = 0
@@ -168,7 +159,7 @@ def main(cfg: DictConfig):
                 action = agent.get_action(state, epsilon)
                 next_state, reward, terminated, truncated, _= agent.env.step(action)
                 if isinstance(state, tuple): 
-                        next_state = next_state[0]
+                    next_state = next_state[0]
                 agent.append_sample(state, action, reward, next_state, terminated)
                 state = next_state
                 episode_reward += reward
@@ -212,7 +203,7 @@ def main(cfg: DictConfig):
                 action = agent.get_action(state,0.01)
                 next_state, reward, terminated, truncated, _= agent.env.step(action)
                 if isinstance(state, tuple): 
-                        next_state = next_state[0]
+                    next_state = next_state[0]
                 done = terminated or truncated
                 agent.append_sample(state, action, reward, next_state, terminated)
                 state = next_state
