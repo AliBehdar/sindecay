@@ -30,12 +30,15 @@ class Network(nn.Module):
         """
 
         super().__init__()
-        hidden = cfg.hidden_size if cfg is not None else 128
+        hidden1 = cfg.hidden_size1
+        hidden2 = cfg.hidden_size2
+        hidden3 = cfg.hidden_size3
         self.num_action = action_size
-        self.layer1 = nn.Linear(state_size, hidden)# Define the first hidden layer with ReLU activation
-        self.layer2 = nn.Linear(hidden, hidden)# Define the second hidden layer with ReLU activation
-        self.state_head = nn.Linear(hidden,self.num_action)# Define the output layer for state values
-        self.action_head = nn.Linear(hidden,self.num_action)# Define the output layer for action values
+        self.layer1 = nn.Linear(state_size, hidden1)
+        self.layer2 = nn.Linear(hidden1, hidden2)
+        self.layer3 = nn.Linear(hidden2, hidden3)
+        self.value_head = nn.Linear(hidden3,1)
+        self.advantage_head = nn.Linear(hidden3,self.num_action)
         self.activation = nn.ReLU()
 
     def forward(self, state):
@@ -49,13 +52,14 @@ class Network(nn.Module):
         
         h = self.activation(self.layer1(state))
         h = self.activation(self.layer2(h))
-        
-        state_vals = self.state_head(h)   # (batch, num_action)
-        action_vals = self.action_head(h)       
-        
-        mean = state_vals = self.state_head(h)   # (batch, num_action)
+        h = self.activation(self.layer3(h))
 
-        advantage = action_vals - mean    # Calculate the advantage by subtracting the mean action value      
-        q_values = state_vals + advantage # Compute the final Q-values by adding state values and advantages 
+        value = self.value_head(h)                  
+        advantages = self.advantage_head(h)      
+        
+        mean_advantages = advantages.mean(dim=1, keepdim=True)  
+        centered_advantages = advantages - mean_advantages  
+
+        q_values = value + centered_advantages 
 
         return q_values

@@ -9,12 +9,18 @@ from omegaconf import DictConfig
 from collections import deque
 import sys
 import os
-import warnings; warnings.filterwarnings("ignore", category=UserWarning)
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
 # Add the parent directory (containing 'utility') to sys.path
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
 from utility.plots import plot
 from utility.utility_off import seed,Network
+# 1.1
+import gymnasium as gym
+import ale_py
+
+
 class DQNAgent:
     def __init__(self, env: gym.Env,cfg):
         
@@ -32,25 +38,28 @@ class DQNAgent:
             gamma (float): discount factor
         """
         self.cfg=cfg
-        # CREATING THE Q-Network
         self.env = env
         self.lr=cfg.learning_rate
         self.action_space = env.action_space
         self.action_space.seed(self.cfg.seed)
         self.state_size = self.env.observation_space.shape[0]
+          
         self.action_size = self.env.action_space.n
         self.batch_size = cfg.batch_size
-        self.target_update = cfg.target_update
+        self.target_updates = cfg.target_updates
         self.dqn = Network(self.state_size, self.action_size,cfg)
         self.dqn_target = Network(self.state_size, self.action_size,cfg)
         self.optimizer = optim.Adam(self.dqn.parameters(),lr=self.lr)
         self.memory = deque(maxlen=self.cfg.memory_size)
         self.Soft_Update = False # use soft parameter update
-        self.tau = self.cfg.tau if hasattr(cfg, 'tau') else 0.005
+        self.tau = cfg.tau 
         self._target_hard_update()
         self.loss_history=[]
         self.gamma = cfg.gamma
-    # EXPLORATION VS EXPLOITATION
+        self.update_counter = 0  # Initialize counter
+        self.soft_update = cfg.soft_update 
+        self._target_hard_update()  # Call after defining it
+
     def get_action(self, state, epsilon):
         state = self._process_state(state)
         state = torch.from_numpy(np.array(state)).float().unsqueeze(0)
@@ -66,16 +75,18 @@ class DQNAgent:
         else:
             action = torch.argmax(q_value).item() 
         return action
+    
     def _process_state(self, state):
         if isinstance(state, dict):
             return np.concatenate([state[key].flatten() for key in sorted(state.keys())])
         else:
             return np.asarray(state).flatten()
+   
     def append_sample(self, state, action, reward, next_state, done):
         state = self._process_state(state)
         next_state = self._process_state(next_state)
         self.memory.append((state, action, reward, next_state, done))
-    # UPDATING THE Q-VALUE
+ 
     def train_step(self):
         mini_batch = random.sample(self.memory, self.batch_size)
 
@@ -108,23 +119,19 @@ class DQNAgent:
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
-       
     
     def _target_hard_update(self):
         self.dqn_target.load_state_dict(self.dqn.state_dict())
-
-    def _target_soft_update(self):
-        for target_param, param in zip(self.dqn_target.parameters(), self.dqn.parameters()):
-            target_param.data.copy_(self.tau * param.data + (1.0 - self.tau) * target_param.data)
-
-        # In train_step, after self.optimizer.step()
-        if self.Soft_Update:
-            self._target_soft_update()
+    
+    def _target_update(self):
+        if self.soft_update:
+            # Soft update: Do this frequently (e.g., every train_step)
+            for target_param, param in zip(self.dqn_target.parameters(), self.dqn.parameters()):
+                target_param.data.copy_(self.tau * param.data + (1.0 - self.tau) * target_param.data)
         else:
-            # Assuming hard update is done periodically elsewhere, but if you want to do it every C steps, you can add a counter
-            # For example:
+            # Hard update: Do this periodically (use counter)
             self.update_counter += 1
-            if self.update_counter % self.cfg.target_update == 0:
+            if self.update_counter % self.target_updates == 0:
                 self._target_hard_update()
         
     def update_Gamma(self):
@@ -143,11 +150,11 @@ class DQNAgent:
 @hydra.main(version_base="1.1", config_path="./conf", config_name="configs")
 def main(cfg: DictConfig):
     seed(cfg)
-    env = gym.make(cfg.env_name,render_mode="human" if not cfg.train else None)
+    gym.register_envs(ale_py) 
+    env = gym.make(cfg.env_name,disable_env_checker=True,render_mode="human" if not cfg.train else None)
     agent = DQNAgent(env,cfg)
     if cfg.train:
         update_cnt = 0
-
         reward_history=[]
         epsilon_history=[] 
         epsilon=cfg.epsilon  
@@ -159,29 +166,35 @@ def main(cfg: DictConfig):
             while not done :
                 update_cnt += 1
                 action = agent.get_action(state, epsilon)
-                next_state, reward, done, _ ,_= agent.env.step(action)
+                next_state, reward, terminated, truncated, _= agent.env.step(action)
                 if isinstance(state, tuple): 
                         next_state = next_state[0]
-                agent.append_sample(state, action, reward, next_state, done)
+                agent.append_sample(state, action, reward, next_state, terminated)
                 state = next_state
                 episode_reward += reward
-
+                done = terminated or truncated
                 # if episode ends
                 if done:
-                    print("Episode: {}/{}, Episodes reward: {}, e: {:.4}".format(episode, cfg.max_episodes, episode_reward, epsilon)) 
+                    print("Episode: {}/{}, Episodes reward: {:.4}, e: {:.3}".format(episode, cfg.max_episodes, episode_reward, epsilon)) 
                     break
 
-                if (update_cnt >= agent.batch_size):
+                if update_cnt >= agent.batch_size:
                     agent.train_step()
-                    if update_cnt % agent.target_update == 0:
-                        if cfg.soft_update:
-                            agent._target_soft_update()
-                        else:
-                            agent._target_hard_update()
-            
+                    if cfg.soft_update:
+                        agent._target_update()
+                    elif update_cnt % agent.target_updates == 0:
+                        agent._target_hard_update()
+
             reward_history.append(episode_reward)   
             epsilon_history.append(epsilon)
-            epsilon = cfg.min_epsilon + (cfg.max_epsilon - cfg.min_epsilon)*np.exp(-cfg.decay_rate*episode) 
+           
+            if cfg.myAl:
+                y = np.exp(-0.01 * episode) * (1 + 0.5 * np.cos(0.2 * episode + 0.5))
+                #y = np.exp(-cfg.decay_rate * x) * (1 + cfg.cos_amp * np.cos(cfg.cos_freq * x + cfg.cos_phase))
+            else:
+                y =  np.exp(-cfg.decay_rate*episode)
+            
+            epsilon = cfg.min_epsilon + (cfg.max_epsilon - cfg.min_epsilon)* y
             
             if episode % cfg.save_interval==0:
                 agent.save(cfg.save_path + '_' + f'{episode}')
@@ -191,21 +204,21 @@ def main(cfg: DictConfig):
         agent.load(cfg.load_path)
         
         for episode in range(5):
-            state = agent.env.reset(seed=1)
+            state = agent.env.reset(cfg.seed)
             state=state[0]
             episode_reward = 0
             done = False  
             while not done:
                 action = agent.get_action(state,0.01)
-                next_state, reward, done, _ ,_= agent.env.step(action)
+                next_state, reward, terminated, truncated, _= agent.env.step(action)
                 if isinstance(state, tuple): 
                         next_state = next_state[0]
-                agent.append_sample(state, action, reward, next_state, done)
+                done = terminated or truncated
+                agent.append_sample(state, action, reward, next_state, terminated)
                 state = next_state
                 episode_reward += reward
-                if done:
-                  
-                    print("Episode: {}/{}, Episodes reward: {}, e: {:.4}".format(episode+1, cfg.max_episodes, episode_reward, 0.01)) 
+                if done: 
+                    print("Episode: {}/{}, Episodes reward: {:.4}, e: {}".format(episode+1, cfg.max_episodes, episode_reward, 0.01)) 
                     break
         pygame.quit()
 

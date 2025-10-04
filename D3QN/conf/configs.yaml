@@ -1,6 +1,8 @@
 seed: 1
-hidden_size: 86
-max_episodes: 300
+hidden_size1: 210
+hidden_size2: 100
+hidden_size3: 16
+max_episodes: 500
 batch_size: 128
 epsilon: 1.0
 max_epsilon: 1.0
@@ -8,20 +10,22 @@ min_epsilon: 0.01
 decay_rate: 0.025
 memory_size: 100000
 learning_rate: 0.001
-target_update: 20
+target_updates: 20
+
 gamma: 0.99
 train_start: 1000
-soft_update: false
+soft_update: true
 tau: 0.1
 train: true
-env_name: "LunarLander-v2"
+# "LunarLander-v2"
+env_name: "ALE/Breakout-v5"
 render_mode_train: null
 render_mode_test: "human"
 save_path: "./weights/final_weights"
 load_path: "./weights/final_weights_300"
 save_interval: 100
 sma_window: 50
-
+myAl : true
 hydra:
   run:
     dir: ./outputs/${now:%m-%d-%H-%M}
