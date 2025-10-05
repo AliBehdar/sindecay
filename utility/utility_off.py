@@ -62,6 +62,7 @@ class NetworkMLP(nn.Module):
         q_values = value + centered_advantages 
 
         return q_values
+
 class NetworkCNN(nn.Module):
     def __init__(self, state_size: int, action_size: int, cfg=None):
         
@@ -75,8 +76,9 @@ class NetworkCNN(nn.Module):
         super().__init__()
         self.activation = nn.ReLU()
         if len(state_size) == 2:
-            state_size = (*state_size, 1)
-        self.in_channels = state_size[2]
+            #state_size = (*state_size, 1)
+            state_size = (1, *state_size)
+        self.in_channels = state_size[0] #
         hidden1 = cfg.hidden_size1
         hidden2 = cfg.hidden_size2
         hidden3 = cfg.hidden_size3
@@ -93,7 +95,7 @@ class NetworkCNN(nn.Module):
         
     def _get_flatten_size(self, shape):
         # shape = (H, W, C); dummy = (1, C, H, W)
-        dummy = torch.zeros(1, shape[2], shape[0], shape[1])
+        dummy = torch.zeros(1, shape[0], shape[1], shape[2])
         h = self.activation(self.conv1(dummy))
         h = self.activation(self.conv2(h))
         h = self.activation(self.conv3(h))

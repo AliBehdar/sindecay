@@ -16,7 +16,7 @@ def plot(episode,cfg,reward_history,epsilon_history,loss_history):
         plt.legend()
         plt.grid(True)
 
-        if episode == cfg.max_episodes:
+        if episode % 100==0:
             plt.savefig('loss_progress.png', format='png', dpi=600, bbox_inches='tight')
             
         plt.tight_layout()
@@ -40,7 +40,7 @@ def plot(episode,cfg,reward_history,epsilon_history,loss_history):
         plt.grid(True)
 
         # Save as file if last episode
-        if episode == cfg.max_episodes:
+        if episode % 100==0:
             plt.savefig('training_progress.png', format='png', dpi=600, bbox_inches='tight')
             
         plt.tight_layout()

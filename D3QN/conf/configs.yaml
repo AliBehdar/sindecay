@@ -3,25 +3,25 @@ hidden_size1: 128
 hidden_size2: 64
 hidden_size3: 16
 max_episodes: 500
-batch_size: 512
+batch_size: 64
 epsilon: 1.0
 
 max_epsilon: 1.0
 min_epsilon: 0.01
-decay_rate: 0.025
-memory_size: 200000
+decay_rate: 0.015
+memory_size: 100000
 learning_rate: 0.008
 target_updates: 20
 
-device : cpu
+device : cuda
 gamma: 0.99
-train_start: 1000
+train_start: 1000 # improtant for MASP
 soft_update: true
-tau: 0.1
+tau: 0.005
 train: true
 # "LunarLander-v2"
-env_name: "ALE/AirRaid-v5"
-obs_type: "ram" # Change to "ram" for RAM observations
+env_name: "ALE/Breakout-v5"
+obs_type: "grayscale" # Change to "ram" for RAM observations
 render_mode_train: null
 render_mode_test: "human"
 save_path: "./weights/final_weights"

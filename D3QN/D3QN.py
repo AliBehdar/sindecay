@@ -76,8 +76,12 @@ class DQNAgent:
             state = state.unsqueeze(0).unsqueeze(0)  # (1, 1, h, w)
         elif state.dim() == 1:  # RAM (features,)
             state = state.unsqueeze(0)  # (1, features)
-        elif state.dim() == 3 and not self.is_ram:  # Single RGB (h, w, c)
-            state = state.unsqueeze(0).permute(0, 3, 1, 2)  # (1, c, h, w)
+        elif state.dim() == 3 :  # Single RGB (h, w, c)
+            if self.cfg.obs_type == "rgb_image":
+                state = state.unsqueeze(0).permute(0, 3, 1, 2)  # For RGB: (1, c, h, w)
+            else:
+                state = state.unsqueeze(0)  # (1, c, h, w)     
+       
         with torch.no_grad():
             q_value = self.dqn(state)[0]
 
@@ -103,16 +107,16 @@ class DQNAgent:
         if not self.is_ram:
             if len(states.shape) == 3:  # (batch, h, w) for grayscale
                 states = states.unsqueeze(1)  # (batch, 1, h, w)
-            else:  # (batch, h, w, c) for RGB
-                states = states.permute(0, 3, 1, 2)  # (batch, c, h, w)
+            #else:  # (batch, h, w, c) for RGB
+            #    states = states.permute(0, 3, 1, 2)  # (batch, c, h, w)
         actions     = torch.from_numpy(actions).long().to(self.device)
         rewards     = torch.from_numpy(rewards).float().to(self.device)
         next_states = torch.from_numpy(next_states).float().to(self.device) 
         if not self.is_ram:
             if len(next_states.shape) == 3:  # (batch, h, w) for grayscale
                 next_states = next_states.unsqueeze(1)  # (batch, 1, h, w)
-            else:  # (batch, h, w, c) for RGB
-                next_states = next_states.permute(0, 3, 1, 2)  # (batch, c, h, w)
+            #else:  # (batch, h, w, c) for RGB
+            #    next_states = next_states.permute(0, 3, 1, 2)  # (batch, c, h, w)
         dones       = torch.from_numpy(dones).float().to(self.device)
 
         next_Qs = self.dqn(next_states)
@@ -170,6 +174,8 @@ def main(cfg: DictConfig):
     seed(cfg)
     gym.register_envs(ale_py) 
     env = gym.make(cfg.env_name,render_mode="human" if not cfg.train else None,obs_type=cfg.obs_type)
+    env=gym.wrappers.ResizeObservation(env, (84, 84)) 
+    env = gym.wrappers.FrameStackObservation(env, 4)
     agent = DQNAgent(env,cfg)
     if cfg.train:
         update_cnt = 0
@@ -177,7 +183,7 @@ def main(cfg: DictConfig):
         epsilon_history=[] 
         epsilon=cfg.epsilon  
         for episode in range(1,cfg.max_episodes+1):
-            state = agent.env.reset(seed=1)
+            state = agent.env.reset()
             state=state[0]
             episode_reward = 0
             done = False  
@@ -196,7 +202,7 @@ def main(cfg: DictConfig):
                     print("Episode: {}/{}, Episodes reward: {:.6}, e: {:.3}".format(episode, cfg.max_episodes, episode_reward, epsilon)) 
                     break
 
-                if update_cnt >= agent.batch_size:
+                if update_cnt >= agent.batch_size and update_cnt % 4 == 0:
                     agent.train_step()
                     if cfg.soft_update:
                         agent._target_update()
