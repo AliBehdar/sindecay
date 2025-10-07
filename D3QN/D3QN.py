@@ -8,6 +8,7 @@ from omegaconf import DictConfig
 from collections import deque
 import sys
 import os
+#from stable_baselines3.common.atari_wrappers import EpisodicLifeEnv
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 # Add the parent directory (containing 'utility') to sys.path
@@ -50,8 +51,10 @@ class DQNAgent:
 
 
         self.is_ram = (cfg.obs_type == "ram")
-
-        if self.is_ram:
+        if "ALE/" not in self.cfg.env_name:
+            self.dqn = NetworkMLP(self.state_size[0], self.action_size, cfg).to(self.device)
+            self.dqn_target = NetworkMLP(self.state_size[0], self.action_size, cfg).to(self.device) 
+        elif self.is_ram :
             self.dqn = NetworkMLP(self.state_size[0], self.action_size, cfg).to(self.device)
             self.dqn_target = NetworkMLP(self.state_size[0], self.action_size, cfg).to(self.device)
         else:
@@ -60,27 +63,35 @@ class DQNAgent:
         self.optimizer = optim.Adam(self.dqn.parameters(),lr=self.lr)
         self.memory = deque(maxlen=self.cfg.memory_size)
         
-        self.Soft_Update = False 
         self.tau = cfg.tau 
         self.loss_history=[]
         self.gamma = cfg.gamma
         self.update_counter = 0  
-        self.soft_update = cfg.soft_update 
-     
 
+    
+    def _process_state(self, state):
+        if isinstance(state, dict):
+            return np.concatenate([state[key].flatten() for key in sorted(state.keys())])
+        else:
+            return np.asarray(state).flatten()
+        
     def get_action(self, state, epsilon):
-        #state = self._process_state(state)
-        state_np = np.array(state)
-        state = torch.from_numpy(state_np).float().to(self.device)
-        if state.dim() == 2:  # Single grayscale (h, w)
-            state = state.unsqueeze(0).unsqueeze(0)  # (1, 1, h, w)
-        elif state.dim() == 1:  # RAM (features,)
-            state = state.unsqueeze(0)  # (1, features)
-        elif state.dim() == 3 :  # Single RGB (h, w, c)
-            if self.cfg.obs_type == "rgb_image":
-                state = state.unsqueeze(0).permute(0, 3, 1, 2)  # For RGB: (1, c, h, w)
-            else:
-                state = state.unsqueeze(0)  # (1, c, h, w)     
+        if "ALE/" not in self.cfg.env_name:
+            state = self._process_state(state)
+            state = torch.from_numpy(np.array(state)).float().unsqueeze(0)
+        else:
+            #state = self._process_state(state)
+            state_np = np.array(state)
+            state = torch.from_numpy(state_np).float().to(self.device)
+            if state.dim() == 2:  # Single grayscale (h, w)
+                state = state.unsqueeze(0).unsqueeze(0)  # (1, 1, h, w)
+            elif state.dim() == 1:  # RAM (features,)
+                state = state.unsqueeze(0)  # (1, features)
+            elif state.dim() == 3 :  # Single RGB (h, w, c)
+                if self.cfg.obs_type == "rgb_image":
+                    state = state.unsqueeze(0).permute(0, 3, 1, 2)  # For RGB: (1, c, h, w)
+                else:
+                    state = state.unsqueeze(0)  # (1, c, h, w)     
        
         with torch.no_grad():
             q_value = self.dqn(state)[0]
@@ -92,16 +103,19 @@ class DQNAgent:
         return action
    
     def append_sample(self, state, action, reward, next_state, done):
+        if "ALE/" not in self.cfg.env_name:
+            state = self._process_state(state)
+            next_state = self._process_state(next_state)
         self.memory.append((state, action, reward, next_state, done))
  
     def train_step(self):
-        mini_batch = random.sample(self.memory, self.batch_size)
+        batch = random.sample(self.memory, self.batch_size)
 
-        states      = np.array([i[0] for i in mini_batch])
-        actions     = np.array([i[1] for i in mini_batch])
-        rewards     = np.array([i[2] for i in mini_batch])
-        next_states = np.array([i[3] for i in mini_batch])
-        dones       = np.array([i[4] for i in mini_batch])
+        states      = np.array([i[0] for i in batch])
+        actions     = np.array([i[1] for i in batch])
+        rewards     = np.array([i[2] for i in batch])
+        next_states = np.array([i[3] for i in batch])
+        dones       = np.array([i[4] for i in batch])
 
         states      = torch.from_numpy(states).float().to(self.device)
         if not self.is_ram:
@@ -136,27 +150,37 @@ class DQNAgent:
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
-    
     def _target_hard_update(self):
         self.dqn_target.load_state_dict(self.dqn.state_dict())
     
     def _target_update(self):
-        if self.soft_update:
-            # Soft update: Do this frequently (e.g., every train_step)
-            for target_param, param in zip(self.dqn_target.parameters(), self.dqn.parameters()):
-                target_param.data.copy_(self.tau * param.data + (1.0 - self.tau) * target_param.data)
-        else:
-            # Hard update: Do this periodically (use counter)
-            self.update_counter += 1
-            if self.update_counter % self.target_updates == 0:
-                self._target_hard_update()
+        for target_param, param in zip(self.dqn_target.parameters(), self.dqn.parameters()):
+            target_param.data.copy_(self.tau * param.data + (1.0 - self.tau) * target_param.data)
+
         
     def update_Gamma(self):
         self.gamma = 1 - 0.985 * (1 - self.gamma)
+    
+    def update_epsilon(self,episode,reward):
+        sum_reward=[] 
+        if episode <= self.cfg.max_episodes - (self.cfg.max_episodes /5):           
+            if self.cfg.myAl:
+                y = np.exp(-0.01 * episode) * (1 + 0.5 * np.cos(0.2 * episode + 0.5))
+                #y = np.exp(-cfg.decay_rate * x) * (1 + cfg.cos_amp * np.cos(cfg.cos_freq * x + cfg.cos_phase))
+                epsilon=self.cfg.min_epsilon + (self.cfg.max_epsilon - self.cfg.min_epsilon)* y
+            else:
+                y =  np.exp(-self.cfg.decay_rate*episode) # 
+                epsilon=self.cfg.min_epsilon + (self.cfg.max_epsilon - self.cfg.min_epsilon)* y
+        else:
+            epsilon=0.01
+            sum_reward.append(reward)
+            if episode==self.cfg.max_episodes:
+                print(sum(sum_reward))
+        return epsilon 
 
     def load(self, path):
 
-        if self.is_ram:
+        if self.is_ram or "ALE/" not in self.cfg.env_name:
             self.dqn = NetworkMLP(self.state_size[0], self.action_size, self.cfg).to(self.device)
         else:
             self.dqn = NetworkCNN(self.state_size, self.action_size, self.cfg).to(self.device)
@@ -172,10 +196,13 @@ class DQNAgent:
 @hydra.main(version_base="1.1", config_path="./conf", config_name="configs")
 def main(cfg: DictConfig):
     seed(cfg)
-    gym.register_envs(ale_py) 
-    env = gym.make(cfg.env_name,render_mode="human" if not cfg.train else None,obs_type=cfg.obs_type)
-    env=gym.wrappers.ResizeObservation(env, (84, 84)) 
-    env = gym.wrappers.FrameStackObservation(env, 4)
+    #gym.register_envs(ale_py) 
+    env = gym.make(cfg.env_name,render_mode="human" if not cfg.train else None)
+    #env = gym.make(cfg.env_name,render_mode="human" if not cfg.train else None,obs_type=cfg.obs_type,frameskip=3, noop_max=30) #frame_skip
+    #env = EpisodicLifeEnv(env)
+    #env=gym.wrappers.ResizeObservation(env,(84,84))
+    #env = gym.wrappers.AtariPreprocessing(env, noop_max=30, frame_skip=2, screen_size=84, terminal_on_life_loss=False, grayscale_obs=True)
+    #env = gym.wrappers.FrameStackObservation(env, 3)
     agent = DQNAgent(env,cfg)
     if cfg.train:
         update_cnt = 0
@@ -183,7 +210,7 @@ def main(cfg: DictConfig):
         epsilon_history=[] 
         epsilon=cfg.epsilon  
         for episode in range(1,cfg.max_episodes+1):
-            state = agent.env.reset()
+            state = agent.env.reset(seed=1)
             state=state[0]
             episode_reward = 0
             done = False  
@@ -191,6 +218,7 @@ def main(cfg: DictConfig):
                 update_cnt += 1
                 action = agent.get_action(state, epsilon)
                 next_state, reward, terminated, truncated, _= agent.env.step(action)
+                #reward = np.clip(reward, -1.0, 1.0)
                 if isinstance(state, tuple): 
                     next_state = next_state[0]
                 agent.append_sample(state, action, reward, next_state, terminated)
@@ -201,24 +229,14 @@ def main(cfg: DictConfig):
                 if done:
                     print("Episode: {}/{}, Episodes reward: {:.6}, e: {:.3}".format(episode, cfg.max_episodes, episode_reward, epsilon)) 
                     break
-
-                if update_cnt >= agent.batch_size and update_cnt % 4 == 0:
+                if update_cnt >= agent.batch_size :#and update_cnt % 4 == 0:
                     agent.train_step()
-                    if cfg.soft_update:
-                        agent._target_update()
-                    elif update_cnt % agent.target_updates == 0:
+                    if update_cnt % agent.target_updates == 0:
                         agent._target_hard_update()
 
             reward_history.append(episode_reward)   
             epsilon_history.append(epsilon)
-           
-            if cfg.myAl:
-                y = np.exp(-0.01 * episode) * (1 + 0.5 * np.cos(0.2 * episode + 0.5))
-                #y = np.exp(-cfg.decay_rate * x) * (1 + cfg.cos_amp * np.cos(cfg.cos_freq * x + cfg.cos_phase))
-            else:
-                y =  np.exp(-cfg.decay_rate*episode)
-            
-            epsilon = cfg.min_epsilon + (cfg.max_epsilon - cfg.min_epsilon)* y
+            epsilon=agent.update_epsilon(episode,reward)
             
             if episode % cfg.save_interval==0:
                 agent.save(cfg.save_path + '_' + f'{episode}')
