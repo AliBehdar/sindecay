@@ -128,3 +128,87 @@ class NetworkCNN(nn.Module):
         q_values = value + centered_advantages
 
         return q_values
+
+class SumTree:
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.tree = np.zeros(2 * capacity - 1)  # Binary tree array
+        self.data = np.zeros(capacity, dtype=object)  # Store experiences
+        self.n_entries = 0
+        self.write = 0
+
+    def _propagate(self, idx, change):
+        parent = (idx - 1) // 2
+        self.tree[parent] += change
+        if parent != 0:
+            self._propagate(parent, change)
+
+    def update(self, idx, p):
+        tree_idx = idx + self.capacity - 1
+        change = p - self.tree[tree_idx]
+        self.tree[tree_idx] = p
+        self._propagate(tree_idx, change)
+
+    def add(self, p, data):
+        idx = self.write + self.capacity - 1
+        self.data[self.write] = data
+        self.update(self.write, p)
+        self.write = (self.write + 1) % self.capacity
+        if self.n_entries < self.capacity:
+            self.n_entries += 1
+
+    def total(self):
+        return self.tree[0]
+
+    def get(self, s):
+        idx = 0
+        while True:
+            left = 2 * idx + 1
+            right = left + 1
+            if left >= len(self.tree):
+                break
+            if s <= self.tree[left]:
+                idx = left
+            else:
+                s -= self.tree[left]
+                idx = right
+        data_idx = idx - self.capacity + 1
+        return data_idx, self.tree[idx], self.data[data_idx]
+
+class PrioritizedReplayBuffer:
+    def __init__(self, capacity, alpha=0.6, beta=0.4, beta_increment=0.001, epsilon=0.01):
+        self.tree = SumTree(capacity)
+        self.alpha = alpha
+        self.beta = beta
+        self.beta_increment = beta_increment
+        self.epsilon = epsilon
+
+    def add(self, experience, error):
+        p = (np.abs(error) + self.epsilon) ** self.alpha
+        self.tree.add(p, experience)
+
+    def sample(self, batch_size):
+        batch = []
+        idxs = []
+        segment = self.tree.total() / batch_size
+        priorities = []
+        self.beta = min(1.0, self.beta + self.beta_increment)
+
+        for i in range(batch_size):
+            a = segment * i
+            b = segment * (i + 1)
+            s = np.random.uniform(a, b)
+            idx, p, data = self.tree.get(s)
+            priorities.append(p)
+            batch.append(data)
+            idxs.append(idx)
+
+        sampling_probs = np.array(priorities) / self.tree.total()
+        is_weights = np.power(self.tree.n_entries * sampling_probs, -self.beta)
+        is_weights /= is_weights.max()  # Normalize
+
+        return batch, idxs, is_weights
+
+    def update(self, idx, error):
+        p = (np.abs(error) + self.epsilon) ** self.alpha
+        self.tree.update(idx, p)

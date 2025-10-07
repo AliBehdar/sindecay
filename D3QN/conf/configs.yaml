@@ -19,7 +19,7 @@ train_start: 1000 # improtant for MASP
 tau: 1
 train: true
 # "LunarLander-v2" ,"ALE/Breakout-v5"
-env_name: "LunarLander-v3"
+env_name: ""
 obs_type: "grayscale" # Change to "ram" for RAM observations
 render_mode_train: null
 render_mode_test: "human"
