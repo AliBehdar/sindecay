@@ -1,0 +1,45 @@
+config_name : "D3QN simple"
+seed: 1
+
+hidden_size1: 128
+hidden_size2: 64
+hidden_size3: 32
+max_episodes: 1000
+batch_size: 128
+
+memory_size: 100000
+learning_rate: 0.001
+target_updates: 20
+gamma: 0.99
+tau: 0.005
+
+epsilon: 1.0
+max_epsilon: 1.0
+min_epsilon: 0.01
+decay_rate1: 0.012
+
+decay_rate: 0.01
+cos_amp : 0.5
+cos_freq : 0.1
+cos_phase : 0.1
+
+device : cuda
+train_start: 1000 # improtant for MASP
+
+train: true
+test : False
+myAl : true
+
+env_name: "LunarLander-v3"
+render_mode_train: null
+render_mode_test: "human"
+save_path: "./weights/final_weights"
+load_path: "./weights/final_weights"
+save_interval: 100
+sma_window: 50
+
+hydra:
+  run:
+    dir: ./outputs/${now:%m-%d-%H-%M}
+  job:
+    chdir: true
