@@ -148,7 +148,7 @@ def main(cfg: DictConfig):
     seed(cfg)
     env = gym.make(cfg.env_name,render_mode="human" if not cfg.train else None,
                    continuous=False, gravity=-9.8,enable_wind=False,
-                     wind_power=15.0, turbulence_power=1.5)
+                     wind_power=10.0, turbulence_power=1.5)
     agent = DQNAgent(env,cfg)
     if cfg.train:
         update_cnt = 0
