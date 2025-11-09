@@ -46,8 +46,9 @@ env/
 # Secrets and keys (don't commit these)
 *.pem
 *.key
-D3QN/outputs/
+perexplo/outputs/
 DQN/outputs/
 PPO/outputs/
 Arxiv/
-D3QN/weights-and-plot/
+perexplo/weights-and-plot/
+perexplo/earlyoutputs

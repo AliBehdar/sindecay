@@ -10,7 +10,9 @@ import os
 #from stable_baselines3.common.atari_wrappers import EpisodicLifeEnv
 from plots import plot
 from utility_off import seed,NetworkMLP
+import logging
 
+logger = logging.getLogger(__name__)
 class DQNAgent:
     def __init__(self, env: gym.Env,cfg):
         
@@ -147,8 +149,8 @@ class DQNAgent:
 def main(cfg: DictConfig):
     seed(cfg)
     env = gym.make(cfg.env_name,render_mode="human" if not cfg.train else None,
-                   continuous=False, gravity=-9.8,enable_wind=False,
-                     wind_power=10.0, turbulence_power=1.5)
+                   continuous= cfg.continuous, gravity=cfg.gravity,enable_wind=cfg.enable_wind,
+                     wind_power=cfg.wind_power, turbulence_power=cfg.turbulence_power)
     agent = DQNAgent(env,cfg)
     if cfg.train:
         update_cnt = 0
@@ -168,13 +170,24 @@ def main(cfg: DictConfig):
                 next_state, reward, terminated, truncated, _= agent.env.step(action)
                 if isinstance(state, tuple): 
                     next_state = next_state[0]
-                done = terminated or truncated
-                agent.append_sample(state, action, reward, next_state, terminated)
+                if cfg.done_lag:
+                    if cfg.done:
+                        done = bool(terminated or truncated)
+                    else:
+                        done = terminated
+                    agent.append_sample(state, action, reward, next_state, done)
+                else :
+                    agent.append_sample(state, action, reward, next_state, done)
+                    if cfg.done:
+                        done = bool(terminated or truncated)
+                    else:
+                        done = terminated
                 state = next_state
                 episode_reward += reward
                 # if episode ends
                 if done:
-                    print("Episode: {}/{}, Episodes reward: {:.6}, e: {:.3}".format(episode, cfg.max_episodes, episode_reward, epsilon)) 
+                    #print("Episode: {}/{}, Episodes reward: {:.6}, e: {:.3}".format(episode, cfg.max_episodes, episode_reward, epsilon)) 
+                    logger.info("Episode: {}/{}, Episodes reward: {:.6}, e: {:.3}".format(episode, cfg.max_episodes, episode_reward, epsilon))
                     break
                 if update_cnt >= agent.batch_size:
                     loss=agent.train_step()
@@ -212,7 +225,8 @@ def main(cfg: DictConfig):
                 state = next_state
                 episode_reward += reward
                 if done: 
-                    print("Episode: {}/{}, Episodes reward: {:.4}, e: {}".format(episode+1, cfg.max_episodes, episode_reward, 0.01)) 
+                    #print("Episode: {}/{}, Episodes reward: {:.4}, e: {}".format(episode+1, cfg.max_episodes, episode_reward, 0.01))
+                    logger.info("Episode: {}/{}, Episodes reward: {:.4}, e: {}".format(episode+1, cfg.max_episodes, episode_reward, 0.01))
                     break
             sum_reward.append(episode_reward)
             
