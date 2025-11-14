@@ -16,32 +16,15 @@ logger = logging.getLogger(__name__)
 class DQNAgent:
     def __init__(self, env: gym.Env,cfg):
         
-        """Initialization.
-        
-        Args:
-            env (gym.Env): openAI Gym environment
-            memory_size (int): length of memory
-            batch_size (int): batch size for sampling
-            target_update (int): period for target model's hard update
-            epsilon_decay (float): step size to decrease epsilon
-            lr (float): learning rate
-            max_epsilon (float): max value of epsilon
-            min_epsilon (float): min value of epsilon
-            gamma (float): discount factor
-        """
-        #self.device = cfg.device #torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.cfg=cfg
         self.env = env
         self.lr=cfg.learning_rate
         self.batch_size = cfg.batch_size
         self.target_updates = cfg.target_updates
         self.action_space = env.action_space
-
         self.action_space.seed(self.cfg.seed)
         self.state_size = self.env.observation_space.shape
         self.action_size = self.env.action_space.n
-
-
         self.dqn = NetworkMLP(self.state_size[0], self.action_size, cfg)
         self.dqn_target = NetworkMLP(self.state_size[0], self.action_size, cfg)
         self.optimizer = optim.Adam(self.dqn.parameters(),lr=self.lr)
@@ -170,18 +153,10 @@ def main(cfg: DictConfig):
                 next_state, reward, terminated, truncated, _= agent.env.step(action)
                 if isinstance(state, tuple): 
                     next_state = next_state[0]
-                if cfg.done_lag:
-                    if cfg.done:
-                        done = bool(terminated or truncated)
-                    else:
-                        done = terminated
-                    agent.append_sample(state, action, reward, next_state, done)
-                else :
-                    agent.append_sample(state, action, reward, next_state, done)
-                    if cfg.done:
-                        done = bool(terminated or truncated)
-                    else:
-                        done = terminated
+
+                done = terminated or truncated
+                agent.append_sample(state, action, reward, next_state, done)
+
                 state = next_state
                 episode_reward += reward
                 # if episode ends

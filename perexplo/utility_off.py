@@ -18,6 +18,35 @@ def seed(cfg):
     torch.backends.cudnn.benchmark = False
     # can raise errors on non-deterministic ops
     # torch.use_deterministic_algorithms(True)
+class DQN_Network(nn.Module):
+    """
+    The Deep Q-Network (DQN) model for reinforcement learning.
+    This network consists of Fully Connected (FC) layers with ReLU activation functions.
+    """
+    
+    def __init__(self, num_actions, input_dim):
+
+        super(DQN_Network, self).__init__()
+                                                          
+        self.FC = nn.Sequential(
+            nn.Linear(input_dim,128),
+            nn.ReLU(inplace=True),
+            nn.Linear(128, 128),
+            nn.ReLU(inplace=True),
+            nn.Linear(128, num_actions)
+            )
+        
+        # Initialize FC layer weights using He initialization
+        for layer in [self.FC]:
+            for module in layer:
+                if isinstance(module, nn.Linear):
+                    nn.init.kaiming_uniform_(module.weight, nonlinearity='relu')
+        
+        
+    def forward(self, x):
+
+        Q = self.FC(x)    
+        return Q
 class NetworkMLP(nn.Module):
     def __init__(self, state_size: int, action_size: int,cfg=None ):
         """
@@ -212,3 +241,58 @@ class PrioritizedReplayBuffer:
     def update(self, idx, error):
         p = (np.abs(error) + self.epsilon) ** self.alpha
         self.tree.update(idx, p)
+
+from collections import deque
+class ReplayMemory:
+    def __init__(self, capacity,device):
+        """
+        Experience Replay Memory defined by deques to store transitions/agent experiences
+        """
+        self.capacity     =    capacity
+        self.states       = deque(maxlen=capacity)
+        self.actions      = deque(maxlen=capacity)
+        self.next_states  = deque(maxlen=capacity)
+        self.rewards      = deque(maxlen=capacity)
+        self.dones        = deque(maxlen=capacity)
+        self.device=device
+        
+    def store(self, state, action, next_state, reward, done):
+        """
+        Append (store) the transitions to their respective deques
+        """
+        
+        self.states.append(state)
+        self.actions.append(action)
+        self.next_states.append(next_state)
+        self.rewards.append(reward)
+        self.dones.append(done)
+        
+        
+    def sample(self, batch_size):
+        """
+        Randomly sample transitions from memory, then convert sampled transitions
+        to tensors and move to device (CPU or GPU).
+        """
+        
+        indices = np.random.choice(len(self), size=batch_size, replace=False)
+
+        states = torch.stack([torch.as_tensor(self.states[i], dtype=torch.float32, device=self.device) for i in indices]).to(self.device)
+
+        actions = torch.as_tensor([self.actions[i] for i in indices], dtype=torch.long, device=self.device)
+
+        next_states = torch.stack([torch.as_tensor(self.next_states[i], dtype=torch.float32, device=self.device) for i in indices]).to(self.device)
+
+        rewards = torch.as_tensor([self.rewards[i] for i in indices], dtype=torch.float32, device=self.device)
+
+        dones = torch.as_tensor([self.dones[i] for i in indices], dtype=torch.bool, device=self.device)
+
+        return states, actions, next_states, rewards, dones
+    
+    
+    def __len__(self):
+        """
+        To check how many samples are stored in the memory. self.dones deque 
+        represents the length of the entire memory.
+        """
+        
+        return len(self.dones)

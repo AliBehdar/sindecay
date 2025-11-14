@@ -12,28 +12,34 @@ hidden_size3: 32
 
 # ---- Training ----
 max_episodes: 1500
-batch_size: 16
+batch_size: 64
 learning_rate: 0.001
-memory_size: 100000
+memory_capacity: 100000   
 target_updates: 20
-gamma: 0.99
+discount_factor : 0.99
 tau: 0.005
+max_steps: 1000          
+update_frequency: 30        
+clip_grad_norm: 3
+learn_frequency: 8
 
-decay_rate: 0.01
+# ---- Temperature ----
+periodic_decay: 0.01
 cos_amp : 0.5
 cos_freq : 0.1
 cos_phase : 0.1
+tempertuer_max : 1
+min_temperature : 0.01
 
 # ---- Epsilon ----
-epsilon: 1.0
-max_epsilon: 1.0
+epsilon_max: 1.0
 min_epsilon: 0.01
-decay_rate1: 0.012
+epsilon_decay: 0.012
 
 # ---- Environment ----
 env_name: "LunarLander-v3"
 gravity: -9.8
-enable_wind: true
+enable_wind: false
 wind_power: 10.0
 turbulence_power: 1.5
 continuous: false
@@ -50,7 +56,12 @@ load_path: "./weights/final_weights"
 save_interval: 100
 sma_window: 50
 myAl: true
-epsilon_greedy: true
+
+epsilon_greedy      : true
+render_fps          : 0
+render              : render
+indricing_Ep_Or_temp: True
+
 # ===============================
 #  Hydra Output Settings
 # ===============================
