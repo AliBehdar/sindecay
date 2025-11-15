@@ -1,34 +1,43 @@
 # ===============================
 #  D3QN Simple Config
 # ===============================
-config_name: "D3QN simple"
+config_name: "periodic exploration"
 seed: 1
 comment: ""
-
+model_name : "DQN"
 # ---- Network ----
 hidden_size1: 128
 hidden_size2: 64
 hidden_size3: 32
 
 # ---- Training ----
-max_episodes: 1500
-batch_size: 16
+max_episodes: 300
+batch_size: 128
 learning_rate: 0.001
-memory_size: 100000
-target_updates: 20
-gamma: 0.99
-tau: 0.005
+memory_size: 100000 #
 
-decay_rate: 0.01
+target_updates: 20 
+gamma: 0.99 
+clip_grad_norm: 3 
+
+
+tau: 0.005
+max_steps: 1000 
+
+periodic_decay: 0.02
 cos_amp : 0.5
 cos_freq : 0.1
-cos_phase : 0.1
+cos_phase : 1.5
 
 # ---- Epsilon ----
-epsilon: 1.0
 max_epsilon: 1.0
 min_epsilon: 0.01
-decay_rate1: 0.012
+# ---- Tempertuer ----
+
+max_tempertuer : 1
+min_tempertuer : 0.01
+
+decay_rate: 0.02
 
 # ---- Environment ----
 env_name: "LunarLander-v3"
@@ -51,6 +60,8 @@ save_interval: 100
 sma_window: 50
 myAl: true
 epsilon_greedy: true
+render_fps          : 0
+render              : render
 # ===============================
 #  Hydra Output Settings
 # ===============================
