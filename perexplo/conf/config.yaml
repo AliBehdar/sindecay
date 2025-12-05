@@ -11,7 +11,7 @@ hidden_size2: 64
 hidden_size3: 32
 
 # ---- Training ----
-max_episodes: 300
+max_episodes: 1500
 batch_size: 128
 learning_rate: 0.001
 memory_size: 100000 #
@@ -21,13 +21,13 @@ gamma: 0.99
 clip_grad_norm: 3 
 
 
-tau: 0.005
+tau: 0.01
 max_steps: 1000 
 
-periodic_decay: 0.02
+periodic_decay: 0.01
 cos_amp : 0.5
 cos_freq : 0.1
-cos_phase : 1.5
+cos_phase : 0.1
 
 # ---- Epsilon ----
 max_epsilon: 1.0
@@ -37,7 +37,7 @@ min_epsilon: 0.01
 max_tempertuer : 1
 min_tempertuer : 0.01
 
-decay_rate: 0.02
+decay_rate: 0.01
 
 # ---- Environment ----
 env_name: "LunarLander-v3"

@@ -163,7 +163,7 @@ class DQNAgent:
             y = np.exp(-self.cfg.periodic_decay * episode ) * (1 + self.cfg.cos_amp * np.cos(self.cfg.cos_freq * episode + self.cfg.cos_phase))
             tempertuer =self.cfg.min_tempertuer + (self.cfg.max_tempertuer - self.cfg.min_tempertuer)* y
         else:
-            y =  np.exp(-self.cfg.epsilon_decay*episode) # 
+            y =  np.exp(-self.cfg.decay_rate*episode) # 
             tempertuer =self.cfg.min_tempertuer + (self.cfg.max_tempertuer - self.cfg.min_tempertuer)* y
         return tempertuer  
     

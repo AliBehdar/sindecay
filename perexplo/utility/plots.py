@@ -21,7 +21,6 @@ def plot(episode, cfg, reward_history, epsilon_history, loss_history):
 
     sma_reward = np.convolve(reward_history, np.ones(50)/50, mode='valid')
 
-    # LOSS plot (same as before)
     plt.figure(figsize=(8, 8))
     plt.plot(loss_history, label='Loss', color='#CB291A', alpha=0.8)
     plt.title("Loss Progress", fontweight='bold')
